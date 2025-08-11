@@ -1,9 +1,0 @@
-build-essential
-gcc
-g++
-gfortran
-libopenblas-dev
-liblapack-dev
-libblas-dev
-pkg-config
-python3-dev

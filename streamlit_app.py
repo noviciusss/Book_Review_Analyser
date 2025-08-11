@@ -2,10 +2,10 @@ import streamlit as st
 
 # Must be first Streamlit command
 st.set_page_config(
-    page_title="Kindle Review Sentiment Analyzer",
+    page_title="Book Review Sentiment Analyzer",
     page_icon="📚",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 import pickle
