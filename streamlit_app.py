@@ -170,7 +170,7 @@ with st.sidebar:
     • **Word2Vec** for text vectorization
     • **Logistic Regression** for classification
     • Trained on **10,000+** Amazon Kindle reviews
-    • **~85%** accuracy on test data
+    • **~75%** accuracy on test data
     """)
     
     st.markdown("### 📝 How It Works")
@@ -191,7 +191,7 @@ with st.sidebar:
     """)
 
 # Main content
-st.markdown('<div class="main-header">📚 Kindle Review Sentiment Analyzer</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">📚 Book Review Sentiment Analyzer</div>', unsafe_allow_html=True)
 st.markdown('<div class="subtitle">Discover the sentiment behind book reviews using AI-powered analysis</div>', unsafe_allow_html=True)
 
 # Create columns for better layout
