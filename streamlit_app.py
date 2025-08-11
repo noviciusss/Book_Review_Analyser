@@ -1,9 +1,19 @@
 import streamlit as st
+
+# Must be first Streamlit command
+st.set_page_config(
+    page_title="Kindle Review Sentiment Analyzer",
+    page_icon="📚",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
 import pickle
 import numpy as np
 import re
 from bs4 import BeautifulSoup
 from nltk.corpus import stopwords
+# Deployment fix: Using numpy 1.26.4 for Python 3.12 compatibility
 from nltk.stem import WordNetLemmatizer
 from gensim.models import Word2Vec
 import nltk
@@ -24,16 +34,20 @@ def setup_nltk():
         nltk.data.find('tokenizers/punkt')
         nltk.data.find('corpora/stopwords')
         nltk.data.find('corpora/wordnet')
+        return True
     except LookupError:
         try:
             nltk.download('punkt', quiet=True)
             nltk.download('stopwords', quiet=True)
             nltk.download('wordnet', quiet=True)
-        except Exception as e:
-            st.error(f"Failed to download NLTK data: {e}")
+            return True
+        except Exception:
+            return False
 
 # Setup NLTK
-setup_nltk()
+nltk_ready = setup_nltk()
+if not nltk_ready:
+    st.error("Failed to download NLTK data. Some features may not work properly.")
 
 # --- Load Saved Models ---
 # Load the Word2Vec model
@@ -95,13 +109,6 @@ def get_average_vector(token_list, model, vector_size):
 
 
 # --- Streamlit App UI ---
-
-st.set_page_config(
-    page_title="Kindle Review Sentiment Analyzer",
-    page_icon="📚",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
 
 # Custom CSS for better styling
 st.markdown("""
