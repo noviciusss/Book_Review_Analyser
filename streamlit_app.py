@@ -6,6 +6,34 @@ from bs4 import BeautifulSoup
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from gensim.models import Word2Vec
+import nltk
+import ssl
+
+# Handle SSL issues with NLTK downloads
+try:
+    _create_unverified_https_context = ssl._create_unverified_context
+except AttributeError:
+    pass
+else:
+    ssl._create_default_https_context = _create_unverified_https_context
+
+# Download NLTK data if not already present
+@st.cache_resource
+def setup_nltk():
+    try:
+        nltk.data.find('tokenizers/punkt')
+        nltk.data.find('corpora/stopwords')
+        nltk.data.find('corpora/wordnet')
+    except LookupError:
+        try:
+            nltk.download('punkt', quiet=True)
+            nltk.download('stopwords', quiet=True)
+            nltk.download('wordnet', quiet=True)
+        except Exception as e:
+            st.error(f"Failed to download NLTK data: {e}")
+
+# Setup NLTK
+setup_nltk()
 
 # --- Load Saved Models ---
 # Load the Word2Vec model

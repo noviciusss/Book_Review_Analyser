@@ -1,0 +1,25 @@
+# Alternative requirements for deployment environments with compilation issues
+streamlit==1.37.0
+pandas==2.0.3
+numpy==1.24.4
+scikit-learn==1.3.2
+nltk==3.8.1
+beautifulsoup4==4.12.2
+# Use a simpler Word2Vec implementation if gensim fails
+# gensim==4.3.0
+# Alternative: Use sklearn's feature extraction instead of Word2Vec
+# If gensim fails, we can modify the code to use TF-IDF instead
+
+# Core dependencies that should install without issues
+requests==2.31.0
+urllib3==2.0.7
+certifi==2023.11.17
+charset-normalizer==3.3.2
+idna==3.6
+click==8.1.7
+packaging==23.2
+python-dateutil==2.8.2
+pytz==2023.3.post1
+six==1.16.0
+setuptools==69.0.3
+wheel==0.42.0
