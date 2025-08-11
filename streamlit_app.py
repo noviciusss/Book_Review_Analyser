@@ -2,124 +2,55 @@ import streamlit as st
 import pickle
 import numpy as np
 import re
-import pandas as pd
 from bs4 import BeautifulSoup
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
-import nltk
+from gensim.models import Word2Vec
 
-# Download required NLTK data if not already present
-@st.cache_resource
-def download_nltk_data():
-    """Download required NLTK data."""
-    try:
-        nltk.data.find('tokenizers/punkt')
-        nltk.data.find('corpora/stopwords')
-        nltk.data.find('corpora/wordnet')
-    except LookupError:
-        nltk.download('punkt', quiet=True)
-        nltk.download('stopwords', quiet=True)
-        nltk.download('wordnet', quiet=True)
+# --- Load Saved Models ---
+# Load the Word2Vec model
+with open('w2v_model.pkl', 'rb') as f:
+    w2v_model = pickle.load(f)
 
-# Download NLTK data
-download_nltk_data()
+# Load the Logistic Regression classifier
+with open('lr_classifier.pkl', 'rb') as f:
+    classifier = pickle.load(f)
 
-# --- Load Models and Initialize Components ---
-@st.cache_resource
-def load_models_and_components():
-    """Load the trained models and initialize text processing components."""
-    try:
-        # Load the Word2Vec model
-        with open('w2v_model.pkl', 'rb') as f:
-            w2v_model = pickle.load(f)
-        
-        # Load the Logistic Regression classifier
-        with open('lr_classifier.pkl', 'rb') as f:
-            classifier = pickle.load(f)
-        
-        # Initialize text processing components
-        stop_words = set(stopwords.words('english'))
-        lemmatizer = WordNetLemmatizer()
-        
-        return w2v_model, classifier, stop_words, lemmatizer
-    except FileNotFoundError as e:
-        st.error(f"Model file not found: {e}")
-        st.stop()
-    except Exception as e:
-        st.error(f"Error loading models: {e}")
-        st.stop()
+# --- Pre-computation for Helper Functions ---
+# It's more efficient to load these once
+stop_words = set(stopwords.words('english'))
+wl = WordNetLemmatizer()
 
-# Load models and components
-w2v_model, classifier, stop_words, lemmatizer = load_models_and_components()
 
-# --- Text Processing Functions ---
-def clean_text(raw_text, stop_words):
+# --- Helper Functions (Copied from your notebook) ---
+
+def clean_text(raw_text):
     """
-    Cleans raw text by performing the following steps:
-    1. Removes HTML tags
-    2. Removes URLs
-    3. Removes special characters and numbers
-    4. Converts to lowercase
-    5. Removes stopwords
-    6. Removes extra whitespace
-    
-    Args:
-        raw_text (str): The original text string
-        stop_words (set): Set of stopwords to remove
-    
-    Returns:
-        str: The cleaned text
+    Cleans raw text by removing HTML, URLs, special characters, and stopwords.
     """
-    if not raw_text or pd.isna(raw_text):
-        return ""
-    
-    # Remove HTML tags
-    text = BeautifulSoup(str(raw_text), "html.parser").get_text()
-    
-    # Remove URLs
+    # 1. Remove HTML tags
+    text = BeautifulSoup(raw_text, "html.parser").get_text()
+    # 2. Remove URLs
     text = re.sub(r'https?://\S+|www\.\S+', '', text)
-    
-    # Remove special characters and numbers, keep only letters
+    # 3. Remove special characters and numbers
     text = re.sub(r'[^a-zA-Z\s]', '', text)
-    
-    # Convert to lowercase and tokenize
+    # 4. Convert to lowercase and split into words
     words = text.lower().split()
-    
-    # Remove stopwords
-    meaningful_words = [w for w in words if w not in stop_words and len(w) > 1]
-    
-    # Join words back and remove extra whitespace
+    # 5. Remove stopwords
+    meaningful_words = [w for w in words if not w in stop_words]
+    # 6. Join words back into a single string
     cleaned_text = " ".join(meaningful_words).strip()
-    
     return cleaned_text
 
-def lemmatize_words(text, lemmatizer):
+def lemmatize_words(text):
     """
     Lemmatizes words in the text.
-    
-    Args:
-        text (str): Input text
-        lemmatizer: WordNet lemmatizer instance
-    
-    Returns:
-        str: Lemmatized text
     """
-    if not text:
-        return ""
-    
-    return " ".join([lemmatizer.lemmatize(word) for word in text.split()])
+    return " ".join([wl.lemmatize(word) for word in text.split()])
 
-def get_average_vector(token_list, model, vector_size=100):
+def get_average_vector(token_list, model, vector_size):
     """
-    Calculates the average vector for a list of tokens using Word2Vec model.
-    
-    Args:
-        token_list (list): List of tokens/words
-        model: Trained Word2Vec model
-        vector_size (int): Size of word vectors
-    
-    Returns:
-        numpy.ndarray: Average vector representation
+    Calculates the average vector for a list of tokens.
     """
     avg_vector = np.zeros((vector_size,), dtype="float32")
     num_words_in_model = 0
@@ -128,206 +59,220 @@ def get_average_vector(token_list, model, vector_size=100):
         if word in model.wv:
             avg_vector = np.add(avg_vector, model.wv[word])
             num_words_in_model += 1
-    
+            
     if num_words_in_model > 0:
         avg_vector = np.divide(avg_vector, num_words_in_model)
-    
+        
     return avg_vector
 
-def preprocess_text(text, stop_words, lemmatizer):
-    """
-    Complete text preprocessing pipeline.
-    
-    Args:
-        text (str): Raw input text
-        stop_words (set): Set of stopwords
-        lemmatizer: WordNet lemmatizer instance
-    
-    Returns:
-        str: Fully preprocessed text
-    """
-    cleaned = clean_text(text, stop_words)
-    lemmatized = lemmatize_words(cleaned, lemmatizer)
-    return lemmatized
-
-def predict_sentiment(text, w2v_model, classifier, stop_words, lemmatizer):
-    """
-    Predicts sentiment of the given text.
-    
-    Args:
-        text (str): Input text
-        w2v_model: Trained Word2Vec model
-        classifier: Trained classifier
-        stop_words (set): Set of stopwords
-        lemmatizer: WordNet lemmatizer instance
-    
-    Returns:
-        tuple: (prediction, confidence, processed_text)
-    """
-    # Preprocess the text
-    processed_text = preprocess_text(text, stop_words, lemmatizer)
-    
-    if not processed_text:
-        return None, None, ""
-    
-    # Tokenize and vectorize
-    tokens = processed_text.split()
-    if not tokens:
-        return None, None, processed_text
-    
-    # Get average vector
-    vector = get_average_vector(tokens, w2v_model, 100)
-    
-    # Check if vector has meaningful content
-    if np.all(vector == 0):
-        return None, None, processed_text
-    
-    # Reshape for prediction
-    model_input = np.array([vector])
-    
-    # Make prediction
-    prediction = classifier.predict(model_input)[0]
-    
-    # Get prediction probabilities for confidence
-    try:
-        probabilities = classifier.predict_proba(model_input)[0]
-        confidence = max(probabilities)
-    except:
-        confidence = None
-    
-    return prediction, confidence, processed_text
 
 # --- Streamlit App UI ---
+
 st.set_page_config(
     page_title="Kindle Review Sentiment Analyzer",
-    page_icon="📖",
+    page_icon="📚",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Sidebar with app information
-st.sidebar.title("About")
-st.sidebar.info(
-    """
-    This app analyzes the sentiment of Kindle book reviews using:
-    - **Word2Vec** for text vectorization
-    - **Logistic Regression** for classification
-    - Trained on **10,000+** Amazon Kindle reviews
+# Custom CSS for better styling
+st.markdown("""
+<style>
+    .main-header {
+        font-size: 3rem;
+        font-weight: bold;
+        text-align: center;
+        color: #1f77b4;
+        margin-bottom: 1rem;
+    }
+    .subtitle {
+        font-size: 1.2rem;
+        text-align: center;
+        color: #666;
+        margin-bottom: 2rem;
+    }
+    .stButton > button {
+        background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+        color: white;
+        font-weight: bold;
+        border: none;
+        border-radius: 25px;
+        padding: 0.5rem 2rem;
+        font-size: 1.1rem;
+        transition: all 0.3s ease;
+    }
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    }
+    .prediction-box {
+        padding: 2rem;
+        border-radius: 15px;
+        margin: 1rem 0;
+        text-align: center;
+        font-size: 1.5rem;
+        font-weight: bold;
+    }
+    .positive {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+    .negative {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        color: white;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Sidebar
+with st.sidebar:
+    st.markdown("### 📊 About This App")
+    st.info("""
+    **🤖 AI-Powered Sentiment Analysis**
     
-    **Preprocessing steps:**
-    1. HTML tag removal
-    2. URL removal
-    3. Special character cleaning
-    4. Stopword removal
-    5. Lemmatization
-    6. Word2Vec vectorization
-    """
-)
+    This app uses advanced machine learning to analyze book review sentiments:
+    
+    • **Word2Vec** for text vectorization
+    • **Logistic Regression** for classification
+    • Trained on **10,000+** Amazon Kindle reviews
+    • **~85%** accuracy on test data
+    """)
+    
+    st.markdown("### 📝 How It Works")
+    st.markdown("""
+    1. **Text Preprocessing**: Removes HTML, URLs, special characters
+    2. **Lemmatization**: Reduces words to root forms
+    3. **Vectorization**: Converts text to numerical vectors
+    4. **Classification**: Predicts positive or negative sentiment
+    """)
+    
+    st.markdown("### 💡 Tips")
+    st.success("""
+    **For better results:**
+    • Write complete sentences
+    • Include descriptive words
+    • Express clear opinions
+    • Minimum 10-15 words recommended
+    """)
 
-st.sidebar.markdown("---")
-st.sidebar.markdown("**Model Performance:**")
-st.sidebar.markdown("- Training Accuracy: ~85%")
-st.sidebar.markdown("- Features: 100D Word2Vec vectors")
+# Main content
+st.markdown('<div class="main-header">📚 Kindle Review Sentiment Analyzer</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">Discover the sentiment behind book reviews using AI-powered analysis</div>', unsafe_allow_html=True)
 
-# Main app
-st.title("📖 Kindle Book Review Sentiment Analyzer")
-st.markdown("---")
-
-st.write("""
-Enter a book review from the Kindle store below, and this app will predict its sentiment using a machine learning model 
-trained on thousands of Amazon Kindle reviews.
-""")
-
-# Input section
-col1, col2 = st.columns([3, 1])
-
-with col1:
-    user_input = st.text_area(
-        "Enter your review text here:",
-        height=150,
-        placeholder="Type your book review here... For example: 'This book was amazing! I loved the characters and the plot was very engaging.'"
-    )
+# Create columns for better layout
+col1, col2, col3 = st.columns([1, 2, 1])
 
 with col2:
-    st.markdown("### Sample Review")
-    if st.button("Use Sample Review"):
-        sample_review = "This book was absolutely fantastic! The characters were well-developed and the plot kept me engaged throughout. I highly recommend it to anyone who enjoys this genre."
-        st.session_state.sample_review = sample_review
+    st.markdown("### ✍️ Enter Your Book Review")
+    
+    # Sample reviews for quick testing
+    sample_reviews = {
+        "Select a sample...": "",
+        "📗 Positive Review": "This book was absolutely fantastic! The characters were well-developed and the plot kept me engaged throughout. I highly recommend it to anyone who enjoys this genre. The writing style was captivating and the story had perfect pacing.",
+        "📕 Negative Review": "I was really disappointed with this book. The story was confusing and the characters were not believable. I couldn't finish it because the plot dragged on and nothing interesting happened.",
+        "📘 Mixed Review": "The book had some good moments but overall it was just okay. Some parts were interesting while others felt repetitive."
+    }
+    
+    selected_sample = st.selectbox("🔍 Try a sample review:", list(sample_reviews.keys()))
+    
+    if selected_sample != "Select a sample...":
+        user_input = st.text_area(
+            "Review Text:",
+            value=sample_reviews[selected_sample],
+            height=150,
+            help="Edit this sample or write your own review"
+        )
+    else:
+        user_input = st.text_area(
+            "Review Text:",
+            placeholder="Type your book review here... For example: 'This book was amazing! The plot was engaging and the characters were well-developed. I couldn't put it down!'",
+            height=150,
+            help="Enter a book review to analyze its sentiment"
+        )
+    
+    # Character count
+    if user_input:
+        char_count = len(user_input)
+        word_count = len(user_input.split())
+        st.caption(f"📊 {char_count} characters, {word_count} words")
 
-# Use sample review if button was clicked
-if 'sample_review' in st.session_state:
-    user_input = st.session_state.sample_review
-    del st.session_state.sample_review
+# Analysis button
+col1, col2, col3 = st.columns([1, 1, 1])
+with col2:
+    analyze_button = st.button("🔍 Analyze Sentiment", type="primary", use_container_width=True)
 
-# Analysis section
-if st.button("🔍 Analyze Sentiment", type="primary"):
-    if user_input.strip():
-        with st.spinner("Analyzing sentiment..."):
-            # Make prediction
-            prediction, confidence, processed_text = predict_sentiment(
-                user_input, w2v_model, classifier, stop_words, lemmatizer
-            )
+if analyze_button:
+    if user_input:
+        with st.spinner("🤖 Analyzing sentiment..."):
+            # 1. Preprocess the input text
+            cleaned = clean_text(user_input)
+            lemmatized = lemmatize_words(cleaned)
             
-            if prediction is not None:
-                # Display results
-                st.markdown("---")
-                st.subheader("📊 Analysis Results")
+            # 2. Vectorize the processed text
+            tokens = lemmatized.split()
+            vector = get_average_vector(tokens, w2v_model, 100) # Assuming vector size is 100
+            
+            # Reshape for the model (sklearn expects a 2D array)
+            model_input = np.array([vector])
+
+            # 3. Make a prediction
+            prediction = classifier.predict(model_input)
+            
+            # Get prediction probability for confidence score
+            try:
+                prediction_proba = classifier.predict_proba(model_input)
+                confidence = max(prediction_proba[0]) * 100
+            except:
+                confidence = None
+            
+            # 4. Display the result with enhanced UI
+            st.markdown("---")
+            
+            if prediction[0] == 1:
+                st.markdown("""
+                <div class="prediction-box positive">
+                    🎉 POSITIVE SENTIMENT 👍
+                </div>
+                """, unsafe_allow_html=True)
                 
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    if prediction == 1:
-                        st.success("### 👍 Positive Sentiment")
-                        st.balloons()
-                    else:
-                        st.error("### 👎 Negative Sentiment")
-                
+                col1, col2, col3 = st.columns(3)
                 with col2:
                     if confidence:
-                        st.metric("Confidence", f"{confidence:.2%}")
-                
-                # Show processed text
-                with st.expander("🔧 View Preprocessed Text"):
-                    st.write("**Original Text:**")
-                    st.write(user_input)
-                    st.write("**Processed Text:**")
-                    st.write(processed_text if processed_text else "No meaningful words found after preprocessing")
-                
+                        st.metric("Confidence Score", f"{confidence:.1f}%")
+                    st.balloons()
+                    
             else:
-                st.warning("⚠️ Could not analyze the text. Please try with a different review that contains more meaningful words.")
+                st.markdown("""
+                <div class="prediction-box negative">
+                    😔 NEGATIVE SENTIMENT 👎
+                </div>
+                """, unsafe_allow_html=True)
+                
+                col1, col2, col3 = st.columns(3)
+                with col2:
+                    if confidence:
+                        st.metric("Confidence Score", f"{confidence:.1f}%")
+            
+            # Show processing details in an expander
+            with st.expander("� View Processing Details"):
+                st.write("**Original Text:**")
+                st.text(user_input)
+                st.write("**Cleaned Text:**")
+                st.text(cleaned)
+                st.write("**Lemmatized Text:**")
+                st.text(lemmatized)
+                st.write("**Number of tokens processed:**", len(tokens))
+                
     else:
-        st.warning("⚠️ Please enter a review to analyze.")
-
-# Additional features
-st.markdown("---")
-st.subheader("💡 Tips for Better Results")
-
-tips_col1, tips_col2 = st.columns(2)
-
-with tips_col1:
-    st.markdown("""
-    **✅ Good practices:**
-    - Use complete sentences
-    - Include descriptive words
-    - Mention specific aspects of the book
-    - Express clear opinions
-    """)
-
-with tips_col2:
-    st.markdown("""
-    **❌ Avoid:**
-    - Very short texts (< 10 words)
-    - Only special characters or numbers
-    - Text in languages other than English
-    - Pure HTML or code
-    """)
+        st.warning("⚠️ Please enter a review to analyze!")
 
 # Footer
 st.markdown("---")
 st.markdown(
     """
-    <div style='text-align: center; color: gray;'>
-    Made with ❤️ using Streamlit | Data from Amazon Kindle Store Reviews
+    <div style='text-align: center; color: #888; padding: 1rem;'>
+        <p>🚀 Built with Streamlit • 🤖 Powered by Machine Learning • 📚 Data from Amazon Kindle Reviews</p>
+        <p>Made with ❤️ for book lovers and data enthusiasts</p>
     </div>
     """,
     unsafe_allow_html=True
