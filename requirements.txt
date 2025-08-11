@@ -1,7 +1,8 @@
 streamlit
 pandas
 numpy
-scikit-learn
+scikit-learn>=1.0,<1.6
 nltk
 beautifulsoup4
-gensim
+gensim>=4.0,<4.4
+python-dateutil
